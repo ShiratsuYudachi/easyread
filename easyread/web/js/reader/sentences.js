@@ -121,4 +121,60 @@
     lit = next;
     lit.forEach((x) => x.classList.add("pair"));
   });
+
+  /* ---------- 当前句：原页面板只框这一句 ----------
+     点正文里的一句（原文或译文都行），原页上就只框这一句；这一句没有逐句定位（旧论文、没对上），仍框整段。
+     layout.json 的 sents 按句存了原页区域：{ 键: [每句的 [{page, box}] 或 null] }，键和阅读页一致。 */
+  let sent = null;  // { id: 块 id, key: 这段文字的键（段落是块 id，列表项是“块id#序号”）, i: 第几句 }
+  PR.currentSentence = (id) => (sent && (id == null || sent.id === id) ? sent : null);
+
+  /* 点到的元素在哪一句上：不在对得上的句子里就是 null */
+  PR.sentenceOf = function (target) {
+    const sp = target.closest && target.closest("#paper .snt");
+    const host = sp && sp.closest(".zh, .en");
+    const zh = host && PR.zhOfEl(host);
+    const blk = sp && sp.closest(".blk");
+    return zh && zh.dataset.key && blk ? { id: blk.dataset.id, key: zh.dataset.key, i: +sp.dataset.s } : null;
+  };
+
+  /* 一句在原页上的区域 [{page, box}]。句数和现在的对齐对不上（layout 还是旧的）、这一句没定位上，都是 null */
+  PR.sentenceRegions = function (s) {
+    const rows = s && ((S.layout[s.id] || {}).sents || {})[s.key];
+    const align = rows && PR.alignOf(s.key);
+    return align && rows.length === align.length && rows[s.i] && rows[s.i].length ? rows[s.i] : null;
+  };
+
+  /* 原页上点在哪一句里（点中了几句重叠的区域取第一句） */
+  PR.sentenceAtPoint = function (id, page, x, y) {
+    const sents = (S.layout[id] || {}).sents || {};
+    for (const key in sents) {
+      for (let i = 0; i < sents[key].length; i++) {
+        const regions = PR.sentenceRegions({ id, key, i }) || [];
+        if (regions.some((r) => r.page === page && x >= r.box[0] - 0.004 && x <= r.box[2] + 0.004 && y >= r.box[1] - 0.003 && y <= r.box[3] + 0.003)) return { id, key, i };
+      }
+    }
+    return null;
+  };
+
+  /* 正文里当前句的标记：原文和译文两边同号的句子都标 */
+  function markSentence() {
+    PR.$$("#paper .snt.sel").forEach((x) => x.classList.remove("sel"));
+    const blk = sent && document.getElementById("b-" + sent.id);
+    if (!blk) return;
+    PR.$$('.zh[data-key="' + CSS.escape(sent.key) + '"]', blk).forEach((zh) => {
+      [zh, PR.enOfZh(zh)].forEach((el) => el && PR.$$(":scope .snt", el).forEach((x) => { if (+x.dataset.s === sent.i) x.classList.add("sel"); }));
+    });
+  }
+  /* 当前句在正文里看得见的那一处（译文和原文都显示时取靠前的），好滚到它 */
+  PR.sentenceSpan = () => PR.$$("#paper .snt.sel").find((x) => x.offsetParent) || null;
+
+  /* 换当前句（null 是清掉）。返回有没有变，调用方据此决定要不要重画原页 */
+  PR.setSentence = function (next) {
+    const same = next ? !!sent && sent.id === next.id && sent.key === next.key && sent.i === next.i : !sent;
+    sent = next || null;
+    markSentence();
+    return !same;
+  };
+  PR.on("block-rendered", (id) => { if (sent && sent.id === id) markSentence(); });  // 段落重画后补回标记
+  PR.on("rendered", markSentence);
 })(window.PR);

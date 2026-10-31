@@ -19,15 +19,24 @@ def _key(en) -> str:
     return " ".join(str(en or "").lower().split())
 
 
+def is_original(term, text) -> bool:
+    """text 就是这个术语的原词（agent / Agents）：译文里原样保留英文不是另一种译法。"""
+    term, text = str(term or "").strip(), str(text or "").strip()
+    return bool(term) and bool(re.fullmatch(re.escape(term) + r"(s|es)?", text, re.I))
+
+
 def conflicts(glossary: list[dict], new: list[dict]) -> list[tuple[str, str, str]]:
     """[(英文, 这批的译法, 已有译法)]。太短的译法不换，免得误伤别的词：一个字的不换；
-    是已有译法一部分的（“标准误”和“标准误差”），三个字以上才换；带括号注释的不换。"""
+    是已有译法一部分的（“标准误”和“标准误差”），三个字以上才换；带括号注释的不换。
+    这批把术语保留原词（译法就是英文原词本身）的不换：那是有意不翻译，不能反过来改成已有的中文译法。"""
     have = {_key(g.get("en")): str(g.get("zh") or "").strip() for g in glossary or [] if isinstance(g, dict)}
     out = []
     for g in new or []:
         if not isinstance(g, dict):
             continue
         old, mine = have.get(_key(g.get("en"))), str(g.get("zh") or "").strip()
+        if is_original(g.get("en"), mine):
+            continue
         if any(c in s for s in (old or "", mine) for c in "（()）"):  # i18n-ok
             continue  # “Unlikelihood（非似然训练）”这种带注释的写法拿来替换正文会到处重复注释，不换
         if old and mine and old != mine and len(mine) >= (3 if mine in old else 2):

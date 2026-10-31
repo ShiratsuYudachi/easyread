@@ -17,7 +17,7 @@ import re
 from ..engines import engines
 from . import codeblocks, langs, prompts, sentences
 from ..app.i18n import tr
-from .terms import _MATH, _mentions, _swap, mentions_count, occurrences
+from .terms import _MATH, _mentions, _swap, is_original, mentions_count, occurrences
 
 LIMIT = 60          # 一次最多检查几段
 _PAREN = re.compile(r"[（(].*?[）)]")  # i18n-ok
@@ -76,6 +76,8 @@ def suspects(paper: dict, edited: set[str], pages: set[int] | None = None) -> tu
                 if _mentions(en, t):
                     if _has(zh, w):
                         agree[t] = agree.get(t, 0) + 1
+                    elif mentions_count(_plain(zh), t) >= mentions_count(en, t):
+                        continue  # 每处都原样保留了英文原词：是有意不翻译，不是漏了术语表译法
                     else:
                         miss.append({"en": t, "want": w})
             if miss and (pages is None or b.get("page") in pages):
@@ -87,6 +89,8 @@ def swap(zh: str, en_text: str, term: str, old: str, use: str, keep: list[str]) 
     """把这段里的 old 换成 use。old 在公式外出现的次数（去掉护住的说法后）要和英文术语出现的次数一样，否则不换，返回 None。"""
     if not old or old == use or len(old) > 3 * max(2, len(use)):
         return None
+    if is_original(term, old):
+        return None  # 要换掉的是英文原词本身：保留原文不翻译是有意的，不改成译法
     guard = sorted({k for k in keep + [use] if old in k and k != old}, key=len, reverse=True)
     n = occurrences(zh, old, guard)
     if n == 0 or n != mentions_count(en_text, term):

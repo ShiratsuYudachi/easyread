@@ -173,3 +173,50 @@ test("right scrollbar moves text and highlights, respects follow, and hands cont
   r.PR.syncPage(false);
   assert.notEqual(scroller.scroll, position, "left scrolling immediately resumes forward sync");
 });
+
+test("a selected sentence is boxed on its own, with the paragraph dimmed behind it", () => {
+  const r = reader();
+  r.PR.state.layout.first = crossing();
+  const sentence = [{ page: 1, box: [0.1, 0.62, 0.4, 0.66] }, { page: 1, box: [0.08, 0.66, 0.3, 0.7] }];
+  r.PR.currentSentence = id => (id === "first" ? { id, key: "first", i: 0 } : null);
+  r.PR.sentenceRegions = () => sentence;
+  r.PR.openPage(1, "first");
+  const regions = r.node(".pv-hl").children;
+  assert.deepEqual(regions.map(x => x.className), ["pv-region dim", "pv-region dim", "pv-region sent", "pv-region sent"]);
+  assert.equal(parseFloat(regions[2].style.left), 9.88);
+  // The sentence is below the visible part of the panel, so it scrolls there centred on the sentence:
+  // page top 18 + (0.62 + 0.66) / 2 of a 1000px page, minus half of the 480px viewport.
+  assert.equal(r.node(".pv-scroll").scroll.top, 18 + 640 - 240);
+});
+
+test("without a located sentence the paragraph is boxed as before", () => {
+  const r = reader();
+  r.PR.state.layout.first = crossing();
+  r.PR.currentSentence = () => ({ id: "first", key: "first", i: 0 });
+  r.PR.sentenceRegions = () => null;
+  r.PR.openPage(1, "first");
+  assert.deepEqual(r.node(".pv-hl").children.map(x => x.className), ["pv-region", "pv-region"]);
+});
+
+test("a sentence that starts on the next page opens that page", () => {
+  const r = reader();
+  r.PR.state.layout.first = { page: 1, box: [0.08, 0.8, 0.92, 0.95], regions: [{ page: 1, box: [0.08, 0.8, 0.92, 0.95] }, { page: 2, box: [0.08, 0.05, 0.92, 0.2] }] };
+  r.PR.currentSentence = id => (id === "first" ? { id, key: "first", i: 2 } : null);
+  r.PR.sentenceRegions = () => [{ page: 2, box: [0.1, 0.06, 0.6, 0.09] }];
+  r.select("first"); r.PR.togglePages(true);
+  assert.equal(r.node(".pv-label").textContent, "第 2 / 2 页");
+  assert.deepEqual(r.node(".pv-hl").children.map(x => x.className), ["pv-region dim", "pv-region sent"]);
+});
+
+test("clicking a sentence on the original page selects it in the text", () => {
+  const r = reader();
+  r.PR.state.layout.first = crossing();
+  const picked = [];
+  r.PR.setSentence = s => picked.push(s);
+  r.PR.sentenceAtPoint = (id, page, x, y) => ({ id, page, x, y });
+  r.PR.openPage(1, "first");
+  const page = r.node(".pv-page");
+  page.listeners.click({ currentTarget: page, clientX: 200, clientY: page.getBoundingClientRect().top + 750 });
+  assert.deepEqual(picked, [{ id: "first", page: 1, x: 0.2, y: 0.75 }]);
+  assert.equal(r.PR.jumped, "b-first");
+});

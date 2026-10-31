@@ -31,6 +31,7 @@ DEFAULTS = {
     "translation_instructions": "",
     "translation_prompt": None,
     "translate_figure_text": True,
+    "keep_term_originals": False,  # 术语保留原文：核心术语不翻译，术语表也登记原词，不再做术语统一和一致性检查
     "figure_images": {"enabled": False, "provider": "codex", "base_url": "", "api_key": "", "model": "", "timeout": 600},
     "opencode": {"command": "", "model": "", "extra_args": [], "timeout": 1200},
     "check_updates": True,       # 打开文献库时问 GitHub 有没有新版本（一天一次），见 updates.py

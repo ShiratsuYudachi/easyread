@@ -18,6 +18,11 @@ def apply(prompt: str, cfg: dict) -> str:
         prompt += ("\n\nFigure text preference overrides the earlier figure-text instructions: "
                    "leave image_en and image_zh empty; do not transcribe or translate labels inside figures. "
                    "Still retain figures, crop boxes and fully translate figure captions and body text.")
+    if cfg.get("keep_term_originals") is True:
+        prompt += ("\n\nTerminology preference overrides every earlier terminology instruction, including the existing glossary: "
+                   "keep each core technical term in its original source-language form. Do not translate it and do not add a "
+                   "translation or the original in parentheses, so the first occurrence is just the term itself. "
+                   "In the glossary write the original term as both en and zh. Translate the rest of each sentence normally.")
     extra = validate(cfg.get("translation_extra", ""))
     # Repair prompts do not contain a style section. Keep legacy preferences there too.
     legacy = validate(cfg.get("translation_instructions", "")) if cfg.get("translation_prompt") is None else ""

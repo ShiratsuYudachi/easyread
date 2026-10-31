@@ -153,6 +153,7 @@
         translation_instructions: c.translation_instructions || "",
         translation_prompt: c.translation_prompt ?? null,
         translate_figure_text: c.translate_figure_text !== false,
+        keep_term_originals: c.keep_term_originals === true,
         figure_images: { enabled: !!c.figure_images?.enabled, provider: c.figure_images?.provider || "codex", base_url: c.figure_images?.base_url || "",
           model: c.figure_images?.model || "", api_key: c.figure_images?.api_key || "" },
         paper_concurrency: Number.isInteger(c.paper_concurrency) ? Math.max(1, Math.min(4, c.paper_concurrency)) : 1,

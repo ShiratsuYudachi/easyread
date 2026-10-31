@@ -5,9 +5,9 @@ const vm = require('node:vm');
 const { test } = require('node:test');
 
 /* 句子对齐的渲染：有 sents 一句一个 span；旧数据、译文改过、对不上的都按整段 */
-function load(blocks, edits = {}) {
+function load(blocks, edits = {}, layout = {}) {
   const PR = {
-    state: { reader: { edits, notes: {} }, paper: { blocks } },
+    state: { reader: { edits, notes: {} }, paper: { blocks }, layout },
     on() {}, emit() {}, esc: String, md: (t) => '<' + t + '>', t: (s) => s, imageUrl: (s) => s, hashText: (s) => s,
     $: () => null, $$: () => [],
   };
@@ -50,4 +50,41 @@ test('list items align per item; captions never', () => {
     { id: 'f', type: 'figure', caption_en: 'A. B.', caption_zh: '甲。乙。', sents: [[2, 2], [5, 4]] }]);
   assert.ok(PR.alignOf('l#0'));
   assert.equal(PR.alignOf('f#caption'), null);
+});
+
+/* 点一句，原页只框这一句：layout.sents 按句存原页区域 */
+const rows = [[{ page: 1, box: [0.1, 0.1, 0.5, 0.12] }], [{ page: 2, box: [0.1, 0.2, 0.9, 0.3] }, { page: 2, box: [0.1, 0.3, 0.4, 0.32] }]];
+const located = () => ({ p1: { page: 1, box: [0.1, 0.1, 0.9, 0.32], sents: { p1: rows } } });
+
+test('a sentence maps to its page regions only while layout and alignment agree', () => {
+  const PR = load([para], {}, located());
+  assert.deepEqual(PR.sentenceRegions({ id: 'p1', key: 'p1', i: 1 }), rows[1]);
+  PR.state.layout.p1.sents.p1 = [rows[0]];  // layout from before the translation was re-aligned
+  assert.equal(PR.sentenceRegions({ id: 'p1', key: 'p1', i: 0 }), null);
+  PR.state.layout.p1.sents.p1 = [rows[0], null];  // this sentence never matched the page
+  assert.equal(PR.sentenceRegions({ id: 'p1', key: 'p1', i: 1 }), null);
+  delete PR.state.layout.p1.sents;  // older layout without sentences
+  assert.equal(PR.sentenceRegions({ id: 'p1', key: 'p1', i: 0 }), null);
+});
+
+test('a point on the original page finds the sentence under it', () => {
+  const PR = load([para], {}, located());
+  const plain = (v) => JSON.parse(JSON.stringify(v));  // objects built inside the vm have another Object prototype
+  assert.deepEqual(plain(PR.sentenceAtPoint('p1', 1, 0.3, 0.11)), { id: 'p1', key: 'p1', i: 0 });
+  assert.deepEqual(plain(PR.sentenceAtPoint('p1', 2, 0.2, 0.31)), { id: 'p1', key: 'p1', i: 1 });
+  assert.equal(PR.sentenceAtPoint('p1', 1, 0.3, 0.5), null);
+  assert.equal(PR.sentenceAtPoint('p1', 2, 0.3, 0.11), null);  // right place, wrong page
+});
+
+test('the current sentence belongs to one block and reports whether it changed', () => {
+  const PR = load([para], {}, located());
+  const first = { id: 'p1', key: 'p1', i: 0 };
+  assert.equal(PR.setSentence(first), true);
+  assert.equal(PR.setSentence({ ...first }), false);
+  assert.equal(PR.currentSentence('p1').i, 0);
+  assert.equal(PR.currentSentence('other'), null);
+  assert.equal(PR.setSentence({ ...first, i: 1 }), true);
+  assert.equal(PR.setSentence(null), true);
+  assert.equal(PR.setSentence(null), false);
+  assert.equal(PR.currentSentence('p1'), null);
 });

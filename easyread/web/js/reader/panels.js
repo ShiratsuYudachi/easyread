@@ -204,6 +204,7 @@
   function termsHtml() {
     const g = S.paper.glossary || [];
     return '<p class="hint" style="margin:0 0 10px">' + PR.t("译法不合心意？改右边的译法，再点“替换”，会把正文里的旧译法换成新的（记为你的修改，公式不动，随时可在段落右键“恢复译者稿”）。") + "</p>" +
+      (g.length ? '<div class="term-all"><button class="btn sm" data-term-all="1">' + PR.t("全部术语显示原文") + "</button></div>" : "") +
       (g.length ? '<table class="terms-t">' + g.map((t, i) => "<tr><td>" + PR.esc(t.en) + '</td><td><input class="input term-in" data-i="' + i + '" value="' + PR.esc(t.zh) + '"></td><td><button class="btn sm line" data-term="' + i + '">' + PR.t("替换") + "</button></td></tr>").join("") + "</table>" : '<p class="hint">' + PR.t("这篇论文还没有术语表。") + "</p>") +
       '<div class="term-free"><div class="hint" style="margin:14px 0 6px">' + PR.t("任意替换") + '</div><div style="display:flex;gap:6px"><input class="input" id="tFrom" placeholder="' + PR.t("原译法") + '"><input class="input" id="tTo" placeholder="' + PR.t("新译法") + '"><button class="btn sm line" data-term="free">' + PR.t("替换") + "</button></div></div>";
   }
@@ -232,6 +233,18 @@
     if (go) { e.preventDefault(); PR.toggleDrawer(false); PR.jumpTo("b-" + go.dataset.go); return; }
     const og = e.target.closest("[data-go-orig]");
     if (og) { e.preventDefault(); PR.toggleDrawer(false); PR.jumpTo("orig-" + og.dataset.goOrig); return; }
+    const all = e.target.closest("[data-term-all]");
+    if (all) {
+      const { n } = PR.termsToOriginal(true);
+      if (!n) return PR.toast(PR.t("正文里没有可以换成原文的术语"));
+      PR.confirm({ title: PR.t("全部术语显示原文？"), body: PR.t("把正文里术语表中的术语共 {n} 处换成英文原文，记为你的修改（公式和代码不动）。刚做完可以在提示里撤销，之后可在段落右键“恢复译者稿”。", { n }), ok: PR.t("全部换成原文"), at: all })
+        .then((ok) => {
+          if (!ok) return;
+          const done = PR.termsToOriginal(false);
+          PR.toast(PR.t("已把 {n} 处术语换成原文", { n: done.n }), { label: PR.t("撤销"), fn: () => PR.undoTermsToOriginal(done.undo) });
+        });
+      return;
+    }
     const t = e.target.closest("[data-term]");
     if (t) {
       let from, to;

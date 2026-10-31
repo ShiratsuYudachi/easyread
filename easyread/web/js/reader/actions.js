@@ -37,6 +37,7 @@
   PR.setCurrent = function (id, opts) {
     PR.$$("#paper .blk.current").forEach((x) => x.classList.remove("current"));
     current = id && PR.blockById[id] ? id : null;
+    if (PR.setSentence && !(current && PR.currentSentence(current))) PR.setSentence(null);  // 换了段，上一段选的句子不再算
     if (!current) { PR.hideBlockbar(); return; }
     const el = document.getElementById("b-" + current);
     el.classList.add("current");
@@ -104,8 +105,14 @@
       if (!blk && !e.target.closest("#margin, #notespanel, #pageview, .topbar")) PR.setCurrent(null);
       return;
     }
-    if (current === blk.dataset.id && bar().classList.contains("open")) PR.hideBlockbar();
-    else PR.setCurrent(blk.dataset.id);
+    // 点在某一句上：原页面板只框这一句。点同一段里的另一句只换框，操作条留着；再点同一处才收起
+    const sent = PR.sentenceOf ? PR.sentenceOf(e.target) : null;
+    const moved = PR.setSentence ? PR.setSentence(sent) : false;
+    const redraw = () => { if (PR.syncPage && PR.$(".pv-follow input").checked) PR.syncPage(true); };
+    if (current === blk.dataset.id && bar().classList.contains("open")) {
+      if (moved && sent) redraw();
+      else { PR.hideBlockbar(); if (moved) redraw(); }
+    } else PR.setCurrent(blk.dataset.id);
   });
   document.addEventListener("contextmenu", (e) => {
     const blk = e.target.closest("#paper .blk");

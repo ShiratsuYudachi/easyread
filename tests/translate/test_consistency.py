@@ -178,6 +178,28 @@ class ConsistencyTest(unittest.TestCase):
         self.assertEqual(p["blocks"][0]["zh"], "标准误差和协方差。")
         self.assertEqual(next(g["zh"] for g in p["glossary"] if g["en"] == "standard error"), "标准误差")
 
+    def test_term_deliberately_kept_in_english_is_not_forced_into_the_glossary_translation(self):
+        # The glossary says 智能体, but the translation keeps "agent" as asked: that is a choice, not an inconsistency.
+        glossary = [{"en": "agent", "zh": "智能体"}]
+        blocks = [{"id": "a", "type": "para", "page": 2, "en": "Each agent learns.", "zh": "每个 agent 学习。"},
+                  {"id": "b", "type": "para", "page": 3, "en": "The agents and the agent differ.", "zh": "agents 和 agent 不同。"}]
+        items, _ = consistency.suspects(paper(blocks, glossary), set())
+        self.assertEqual(items, [])  # nothing to send to the model
+        ws = self.make([dict(b) for b in blocks])
+        ws.update("paper", lambda p: p.update(glossary=glossary))
+        n, calls, _ = self.run_check(ws, {"use": {"agent": "智能体"}, "fixes": []}, [1, 2, 3])
+        self.assertEqual((n, calls), (0, []))
+        # Even when a model names the English word as "another rendering", the program does not rewrite it.
+        self.assertIsNone(consistency.swap("每个 agent 学习。", "Each agent learns.", "agent", "agent", "智能体", []))
+        self.assertIsNone(consistency.swap("每个 Agent 学习。", "Each agent learns.", "agent", "Agent", "智能体", []))
+
+    def test_partly_kept_term_is_still_checked_but_the_english_stays(self):
+        glossary = [{"en": "agent", "zh": "智能体"}]
+        blocks = [{"id": "a", "type": "para", "page": 2, "en": "An agent and another agent.", "zh": "一个 agent 和另一个代理。"}]
+        items, _ = consistency.suspects(paper(blocks, glossary), set())
+        self.assertEqual([i["key"] for i in items], ["a"])  # one mention is not kept in English
+        self.assertIsNone(consistency.swap("一个 agent 和另一个代理。", "An agent and another agent.", "agent", "agent", "智能体", []))
+
     def test_user_edit_during_check_is_not_overwritten(self):
         ws = self.make([{"id": "a", "type": "para", "page": 2, "en": "The standard error.", "zh": "标准误。"}])
 
@@ -221,6 +243,53 @@ class TermsUnifyTest(unittest.TestCase):
                            {"id": "y", "type": "para", "page": 3, "en": "The bias is small.", "zh": "偏差很小。"}]}
         terms.unify([{"en": "bias", "zh": "偏置"}], data)
         self.assertEqual([b["zh"] for b in data["blocks"]], ["偏差很小，但标准偏差很大。", "偏置很小。"])
+
+    def test_merge_time_unify_leaves_a_term_the_batch_kept_in_english(self):
+        data = {"glossary": [{"en": "agent", "zh": "agent"}],
+                "blocks": [{"id": "x", "type": "para", "page": 3, "en": "Each agent learns.", "zh": "每个 agent 学习。"}]}
+        self.assertEqual(terms.unify([{"en": "agent", "zh": "智能体"}], data), [])
+        self.assertEqual(data["blocks"][0]["zh"], "每个 agent 学习。")
+        # Unchanged, first registered wins: a later batch that translated it follows the earlier choice to keep English.
+        data = {"glossary": [{"en": "agent", "zh": "智能体"}],
+                "blocks": [{"id": "x", "type": "para", "page": 3, "en": "Each agent learns.", "zh": "每个智能体学习。"}]}
+        terms.unify([{"en": "agent", "zh": "agent"}], data)
+        self.assertEqual(data["blocks"][0]["zh"], "每个agent学习。")
+
+
+class KeepTermsOriginalTest(unittest.TestCase):
+    """设置里的“术语保留原文”：提示词明确要求，术语表一律登记原词，之后不做术语统一和一致性检查。"""
+
+    def run_paper(self, keep):
+        ws = make_ws(4)
+        self.addCleanup(shutil.rmtree, ws.root, True)
+        seen = []
+
+        def engine(cfg, prompt, cwd, images=None, cancel=None, meter=None):
+            seen.append(prompt)
+            if "这次只处理第" not in prompt:  # the consistency pass
+                return json.dumps({"use": {"agent": "智能体"}, "fixes": []})
+            page = page_of(prompt)
+            # The model keeps "agent" in the text but still registers a Chinese rendering in the glossary.
+            return json.dumps({"glossary": [{"en": "agent", "zh": "智能体"}],
+                               "blocks": [{"id": f"p{page}-1", "type": "para", "page": page, "en": "Each agent learns.",
+                                           "zh": "每个 agent 学习。"}]})
+        cfg = {"engine": "openai", "batch_pages": 1, "concurrency": 1, "openai": {"vision": False}, "keep_term_originals": keep}
+        run_pages(ws, cfg, [1, 2, 3, 4], engine)
+        return ws, seen
+
+    def test_option_on_asks_for_originals_and_registers_them(self):
+        ws, seen = self.run_paper(True)
+        translating = [p for p in seen if "这次只处理第" in p]
+        self.assertEqual(len(translating), 4)
+        self.assertTrue(all("keep each core technical term in its original" in p for p in translating))
+        self.assertEqual(ws.load("paper")["glossary"], [{"en": "agent", "zh": "agent"}])
+        self.assertEqual(len(seen), 4)  # no consistency pass
+        self.assertTrue(all(b["zh"] == "每个 agent 学习。" for b in ws.load("paper")["blocks"]))
+
+    def test_option_off_keeps_the_usual_behaviour(self):
+        ws, seen = self.run_paper(False)
+        self.assertFalse(any("keep each core technical term" in p for p in seen))
+        self.assertEqual(ws.load("paper")["glossary"], [{"en": "agent", "zh": "智能体"}])
 
 
 class SeamTest(unittest.TestCase):

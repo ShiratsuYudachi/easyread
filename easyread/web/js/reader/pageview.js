@@ -8,6 +8,11 @@
   const regionsOf = (loc) => !loc ? [] : loc.regions?.length ? loc.regions :
     (loc.boxes?.length ? loc.boxes : [loc.box]).map(box => ({ page: loc.page, box }));
   const boxesOf = (loc, page) => regionsOf(loc).filter(r => r.page === page).map(r => r.box);
+  /* 这一段里选中的那句在原页上的区域；没选句子、或这句没有逐句定位就是 null，照旧框整段 */
+  const sentenceOn = (blockId) => {
+    const sent = blockId && PR.currentSentence?.(blockId);
+    return sent ? PR.sentenceRegions(sent) : null;
+  };
 
   /* 右侧面板开关：pages | notes | null */
   /* 面板滑出的同时正文就让位：重排只要几十毫秒（fitWide 不再重量公式），不必等面板滑完再跳一下。 */
@@ -153,16 +158,21 @@
   function highlightBlock(page, blockId) {
     pageNodes.forEach(p => p.hl.classList.remove("on"));
     const loc = blockId && S.layout[blockId];
+    const sentence = blockId && sentenceOn(blockId);
     pair(boxesOf(loc, page).length ? blockId : null);
+    const region = ([x0, y0, x1, y1], className, padX, padY) => {
+      const node = document.createElement("div");
+      node.className = className;
+      Object.assign(node.style, { left: (x0 * 100 - padX) + "%", top: (y0 * 100 - padY) + "%", width: ((x1 - x0) * 100 + padX * 2) + "%", height: ((y1 - y0) * 100 + padY * 2) + "%" });
+      return node;
+    };
     pageNodes.forEach((entry, i) => {
       const boxes = boxesOf(loc, i + 1), hl = entry.hl;
       if (!boxes.length) return;
-      hl.replaceChildren(...boxes.map(([x0, y0, x1, y1]) => {
-        const region = document.createElement("div");
-        region.className = "pv-region";
-        Object.assign(region.style, { left: (x0 * 100 - 0.4) + "%", top: (y0 * 100 - 0.3) + "%", width: ((x1 - x0) * 100 + 0.8) + "%", height: ((y1 - y0) * 100 + 0.6) + "%" });
-        return region;
-      }));
+      // 选了一句：整段退成淡淡的底，这一句按行框出来
+      const mine = sentence ? sentence.filter(r => r.page === i + 1) : [];
+      hl.replaceChildren(...boxes.map(box => region(box, sentence ? "pv-region dim" : "pv-region", 0.4, 0.3)),
+                         ...mine.map(r => region(r.box, "pv-region sent", 0.12, 0.08)));
       hl.classList.add("on");
     });
   }
@@ -178,7 +188,13 @@
     loadNearby(pvPage); updatePageLabel();
     highlightBlock(pvPage, blockId);
     const loc = blockId && S.layout[blockId];
-    if (boxesOf(loc, pvPage).length) {
+    const here = (blockId && sentenceOn(blockId) || []).filter(r => r.page === pvPage);
+    if (here.length) {
+      // 已经在面板里看得清就不动，连着点同一段里的几句时原页不会跟着晃
+      const top = pageTop(node) + here[0].box[1] * node.offsetHeight, bottom = pageTop(node) + here[0].box[3] * node.offsetHeight;
+      const view = scroller.clientHeight, at = scroller.scrollTop;
+      if (top < at + view * 0.12 || bottom > at + view * 0.88) scroller.scrollTo({ top: Math.max(0, (top + bottom) / 2 - view / 2), behavior: "smooth" });
+    } else if (boxesOf(loc, pvPage).length) {
       const boxes = boxesOf(loc, pvPage);
       const [, y0, , y1] = boxes[0];
       scroller.scrollTo({ top: Math.max(0, pageTop(node) + ((y0 + y1) / 2) * node.offsetHeight - scroller.clientHeight / 2), behavior: "smooth" });
@@ -216,13 +232,17 @@
   }
   function pickPage(e, page) {
     const r = e.currentTarget.getBoundingClientRect();
-    const id = blockAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, page);
+    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    const id = blockAt(x, y, page);
     if (!id) return;
     pvPage = page;
     pvBlock = id;
     holdUntil = Date.now() + 1500;  // 跳过去的滚动会触发“跟随阅读位置”，别让它把刚点的段换掉
+    PR.setSentence?.(PR.sentenceAtPoint(id, page, x, y));  // 点中的是哪一句，正文里也标出来
     showPage(pvPage, id);
     PR.jumpTo("b-" + id);
+    const span = PR.sentenceSpan?.();
+    if (span) PR.centerOn(span);  // 段落很长时直接落到这一句
   }
 
   PR.syncPage = function (force) {
@@ -238,8 +258,8 @@
     }
     if (!force && id === pvBlock) return;
     pvBlock = id;
-    const loc = S.layout[id];
-    showPage(loc ? loc.page : b.page, id);
+    const loc = S.layout[id], first = (sentenceOn(id) || [])[0];
+    showPage(first ? first.page : loc ? loc.page : b.page, id);  // 选中的句子可能整句在下一页
   };
 
   PR.$(".pv-follow input").addEventListener("change", (e) => {

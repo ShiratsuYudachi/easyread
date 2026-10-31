@@ -31,6 +31,21 @@ class InstructionsTest(unittest.TestCase):
                             self.assertIn("Japanese" if target == "ja" else "English" if target == "en" else "Chinese", shown["translation_prompt_default"])
                         self.assertIn(prompts.schema(target), actual)
 
+    def test_keep_term_originals_adds_an_override_only_when_on(self):
+        base = prompts.rules("zh") + "\n" + prompts.schema("zh")
+        on = instructions.apply(base, {**config.DEFAULTS, "keep_term_originals": True})
+        self.assertIn("overrides every earlier terminology instruction", on)
+        self.assertIn("both en and zh", on)
+        for cfg in ({**config.DEFAULTS}, {**config.DEFAULTS, "keep_term_originals": False}):
+            self.assertNotIn("overrides every earlier terminology instruction", instructions.apply(base, cfg))
+        self.assertIs(config.DEFAULTS["keep_term_originals"], False)
+
+    def test_keep_term_originals_must_be_a_boolean(self):
+        with patch.object(settings_api.config, "save") as save:
+            with self.assertRaises(ValueError):
+                settings_api.save_config({"keep_term_originals": "yes"})
+            save.assert_not_called()
+
     def test_custom_prompt_is_not_rewritten_when_switching_languages(self):
         custom = "术语保留英文；Keep KV cache unchanged."
         for language in ("zh", "en", "zh-Hant"):

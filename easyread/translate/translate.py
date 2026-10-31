@@ -135,7 +135,7 @@ def _fill_batch(ws: Workspace, cfg: dict, batch: list[int], cancel, say, meter=N
             journal(ws, tr("第 {pages} 页修正失败，保留原译：{err}", pages=batch, err=e))
     instructions.filter_figure_text(data, cfg)
     with _merge_lock:
-        _unify_terms(ws, data, batch, {k: v if isinstance(v, str) else json.dumps(v, ensure_ascii=False) for k, v in items.items()})
+        _unify_terms(ws, data, batch, {k: v if isinstance(v, str) else json.dumps(v, ensure_ascii=False) for k, v in items.items()}, cfg)
         missing = fill_zh(ws, data, [n for n in batch if n not in empty], set(items), sentences.unmark_fill(data["zh"], ends))
         _save_checks(ws, data.get("checks"), batch)
         if not missing:
@@ -188,7 +188,7 @@ def _one_batch(ws: Workspace, cfg: dict, batch: list[int], total_pages: int, can
         if not read:
             instructions.filter_figure_text(data, cfg)
         prepare_figures(ws.root, data["blocks"], total_pages)
-        _unify_terms(ws, data, batch)
+        _unify_terms(ws, data, batch, None, cfg)
         drop = _one_references(ws, data, batch)
         merge_blocks(ws, data, done=keep, replace_pages=keep, en_only=read, drop_ids=drop)
         _save_checks(ws, data.get("checks"), batch)
@@ -220,8 +220,14 @@ def _one_references(ws: Workspace, data: dict, batch: list[int]) -> list[str]:
     return [b["id"] for b in others]
 
 
-def _unify_terms(ws: Workspace, data: dict, batch: list[int], en_of: dict | None = None) -> None:
-    """这批新报的术语和术语表里已有的译法不同（分段并行时几段各自先定了译法）：译文改成已有的说法。在合并锁里调。"""
+def _unify_terms(ws: Workspace, data: dict, batch: list[int], en_of: dict | None = None, cfg: dict | None = None) -> None:
+    """这批新报的术语和术语表里已有的译法不同（分段并行时几段各自先定了译法）：译文改成已有的说法。在合并锁里调。
+    术语保留原文（cfg.keep_term_originals）时不统一：术语表一律登记原词，译文里的术语本来就是原词。"""
+    if (cfg or {}).get("keep_term_originals") is True:
+        for g in data.get("glossary") or []:
+            if isinstance(g, dict) and str(g.get("en") or "").strip():
+                g["zh"] = g["en"]
+        return
     for en, mine, old in terms.unify(ws.load("paper").get("glossary", []), data, en_of):
         journal(ws, tr("第 {page} 页起术语统一：{en} 的“{mine}”改成已有的“{old}”", page=batch[0], en=en, mine=mine, old=old))
 
@@ -383,7 +389,7 @@ def translate_pages(ws: Workspace, cfg: dict, pages: list[int], cancel, report, 
         failed.update(dict.fromkeys(e.pages, err) if err else {})
         state["ok"].update([] if err else e.pages)
         journal(ws, tr("{pages} 失败：{err}", pages=label(e.pages), err=err) if err else tr("{pages} 完成", pages=label(e.pages)))
-    if not read and len(batches) > 1 and not state["quota"] and state["ok"]:
+    if not read and len(batches) > 1 and not state["quota"] and state["ok"] and cfg.get("keep_term_originals") is not True:
         try:  # 检查失败或这时取消，都不影响已经译好的内容：照常结束，不算取消
             report(state["done"], len(pages), tr("正在检查术语一致性"))
             consistency.check(ws, cfg, sorted(state["ok"]), cancel, meter, journal, _merge_lock)

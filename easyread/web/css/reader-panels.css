@@ -23,6 +23,7 @@ body.drawer-open #scrim { opacity: 1; pointer-events: auto; }
 .toc a .n { display: inline-block; min-width: 1.9em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .toc .cnt { float: right; font-size: 11px; color: var(--ink-3); }
 .toc .group { font-size: 11px; letter-spacing: .2em; color: var(--ink-3); margin: 14px 0 4px; }
+.term-all { margin: 0 0 10px; }
 .terms-t { width: 100%; border-collapse: collapse; }
 .terms-t td { padding: 5px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
 .terms-t td:first-child { font: 13px/1.4 var(--serif-en); color: var(--ink-2); padding-right: 8px; width: 42%; }
@@ -61,6 +62,9 @@ body.resizing .side-panel { transition: none; }
 .pv-hl { position: absolute; inset: 0; pointer-events: none; transition: opacity .25s ease; opacity: 0; }
 .pv-region { position: absolute; border-radius: 3px; background: rgba(236, 196, 92, .22); box-shadow: 0 0 0 2px rgba(214, 160, 40, .55); }
 .pv-hl.on { opacity: 1; }
+/* 选了一句：整段退成淡淡的底，这一句像选中文字那样按行框出来（相邻整行已合成一块，不叠边） */
+.pv-region.dim { background: rgba(236, 196, 92, .07); box-shadow: 0 0 0 1px rgba(214, 160, 40, .28); }
+.pv-region.sent { border-radius: 2px; background: rgba(255, 207, 51, .42); box-shadow: none; mix-blend-mode: multiply; }
 .pv-page.pickable { cursor: pointer; }
 /* 正文里和原页框对应的段：同一个琥珀色，左边一道竖条 + 很淡的底色，不抢正文 */
 body.pv-open .blk.pv-pair { background: rgba(236, 196, 92, .09); box-shadow: 0 0 0 6px rgba(236, 196, 92, .09); }

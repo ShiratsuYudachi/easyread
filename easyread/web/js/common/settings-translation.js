@@ -13,6 +13,7 @@
       select('paper_concurrency', PR.t("同时翻译几篇"), [1,2,3,4].map(n => [n, PR.t("{n} 篇", {n})]), c.paper_concurrency || 1, PR.t("修改后重启生效；多篇并行可能触发模型限流")) +
       select('page_cap', PR.t("超过多少页先问我"), [30,60,100,200].map(n => [n, PR.t("{n} 页", {n})]).concat([[0,PR.t("不限")]]), c.page_cap ?? 60) +
       '</div><div class="translation-options"><label class="check" title="' + PR.t("仅影响之后的翻译；图片题注照常翻译") + '"><input type="checkbox" data-k="translate_figure_text"' + (c.translate_figure_text !== false ? ' checked' : '') + '>' + PR.t("翻译图内文字") + '</label>' +
+      '<label class="check" title="' + PR.t("核心术语不翻译，术语表也登记原词，之后不再做术语统一；仅影响之后的翻译") + '"><input type="checkbox" data-k="keep_term_originals"' + (c.keep_term_originals === true ? ' checked' : '') + '>' + PR.t("术语保留原文") + '</label>' +
       (c.engine === 'openai' ? '<label class="check"><input type="checkbox" data-k="openai.vision"' + (c.openai.vision ? ' checked' : '') + '>' + PR.t("模型能看图") + '</label>' : '') + '</div>' +
       '<label class="check"><input type="checkbox" data-k="figure_images.enabled"' + (images.enabled ? ' checked' : '') + '>' + PR.t("生成译图（尽量保留原图布局）") + '</label>' +
       '<p class="hint">' + PR.t("默认使用 Codex 订阅生成译图，不需要额外 API Key。生成失败时保留原图和文字译文；关闭“翻译图内文字”也会停止生成译图。仅影响之后的翻译。") + '</p>' +

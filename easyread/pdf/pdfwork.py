@@ -13,10 +13,10 @@ from functools import lru_cache
 from pathlib import Path
 from statistics import median
 
-from ..translate import float_order
+from ..translate import float_order, sentences
 from .caption_extent import column as _column, overlap_x as _overlap_x, page_locs as _page_locs
 from .caption_extent import extend_captioned as _extend_captioned
-from .text_regions import locate_prose
+from .text_regions import locate_prose, utf16_to_index
 from .render_limits import render_page
 from ..library.store import Workspace, write_json_atomic
 
@@ -130,7 +130,7 @@ def crop(root: Path, page: int, box: list[float], out_name: str, scale: float = 
 
 _MATH = re.compile(r"\$[^$]*\$")
 _ALNUM = re.compile(r"[a-z0-9]")
-LOCATE_VERSION = "10"  # 正文保存跨栏、跨页的多个实测区域；旧论文打开时重算一次。
+LOCATE_VERSION = "11"  # 正文另存逐句的原页区域（layout 的 sents）；旧论文打开时重算一次。
 
 
 def _norm(s: str) -> str:
@@ -192,6 +192,26 @@ def block_english(block: dict) -> str:
     return block.get("en", "")
 
 
+def sentence_spans(block: dict) -> list[tuple[str, int, list[int]]]:
+    """块里句子对齐还有效的那几段：(键, 在 block_english 里的起点, 每句句尾在 block_english 里的下标)。
+
+    键和阅读页一致：段落是块 id，列表项是“块 id#序号”。sents 按 UTF-16 记，这里换成 Python 下标。
+    """
+    if block.get("type") == "list":
+        parts = [(f"{block.get('id')}#{n}", it) for n, it in enumerate(block.get("items", []))]
+    else:
+        parts = [(block.get("id"), block)]
+    spans, start = [], 0
+    for key, obj in parts:
+        english = obj.get("en", "")
+        if sentences.valid(obj):
+            ends = utf16_to_index(english, [row[0] for row in obj["sents"]])
+            if ends:
+                spans.append((key, start, [start + end for end in ends]))
+        start += len(english) + 1  # " ".join 在列表项之间放一个空格
+    return spans
+
+
 def locate(root: Path) -> dict:
     with _LAYOUT_LOCK:
         return _locate(root)
@@ -217,7 +237,7 @@ def _locate(root: Path) -> dict:
             layout[bid] = manual
             continue
         if block.get("type") in ("para", "list"):
-            prose = locate_prose(block_english(block), page, stream)
+            prose = locate_prose(block_english(block), page, stream, sentence_spans(block))
             if prose:
                 layout[bid] = prose
                 continue
