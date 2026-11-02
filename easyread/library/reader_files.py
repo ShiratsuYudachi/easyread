@@ -5,7 +5,7 @@ import sys
 import threading
 from pathlib import Path
 
-from ..pdf import figures, pdfwork, links
+from ..pdf import citations, figures, pdfwork, links
 from ..app import foreground
 from ..app.log import log
 
@@ -49,6 +49,7 @@ def prepare_later(ws, gate=None) -> None:
                     prepare(ws)
                 refresh_layout(ws)
                 links.refresh(ws)
+                citations.refresh(ws)
                 if (ws.load("job") or {}).get("state") in ("queued", "running"):
                     return
                 figures.fill(ws)

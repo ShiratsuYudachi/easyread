@@ -79,12 +79,45 @@
     return { footnotePage: b.page };
   };
 
+  /* 作者-年份引用（“Harding and Kloster, 2025”）：PDF 里这些字是指向参考文献条目的链接，后端按链接把字面记在条目的 cites 上
+     （pdf/citations.py）。原文、译文里出现就链上，和 [n] 一样悬停看条目、点击跳过去。
+     译文常把 et al. 写成“等/等人”、and 写成“和”，括号换成全角，这些都算；只有作者没有年份的（“(Anthropic)”）要在括号里才算。 */
+  let authorCites = null;
+  PR.setAuthorCites = function (refs) {
+    const ids = [], alts = [], labels = [];
+    const word = (w) => w === "et al." ? "(?:et\\s+al\\.?|等人?)" : w === "and" || w === "&" ? "(?:and|&amp;|和|与)"
+      : PR.esc(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const r of refs || []) {
+      for (const pieces of r.cites || []) {
+        const words = [];  // "et" + "al." is one token: the translation may write 等 / 等人 instead
+        for (const w of pieces.join(" ").split(/\s+/).filter(Boolean)) {
+          if (/^al\.?$/.test(w) && words[words.length - 1] === "et") words[words.length - 1] = "et al.";
+          else words.push(w);
+        }
+        if (!words.length) continue;
+        let src = words.map(word).join("[\\s,，;；(（]*");
+        // Author only: a citation of a product or organisation, "(Anthropic)"; never "(OpenAI, 2026a)"'s first half.
+        if (!/\d/.test(pieces.join(""))) src = "(?<=[(（;；]\\s{0,2})" + src + "(?=\\s{0,2}[)）;；])";
+        labels.push({ id: String(r.id), src, size: words.join(" ").length });
+      }
+    }
+    labels.sort((a, b) => b.size - a.size);  // the longest label wins where two start at the same place
+    for (const l of labels) { ids.push(l.id); alts.push("(" + l.src + ")"); }
+    authorCites = alts.length ? { ids, re: new RegExp("(?<![\\p{L}\\p{N}])(?:" + alts.join("|") + ")(?![\\p{L}\\p{N}])", "gu") } : null;
+  };
+
   function citeLinks(s) {
-    return s.replace(/\[(\d+(?:\s*[,，–-]\s*\d+)*)\]/g, (m, inner) => {
+    s = s.replace(/\[(\d+(?:\s*[,，–-]\s*\d+)*)\]/g, (m, inner) => {
       const parts = inner.split(/(\s*[,，–-]\s*)/);
       const linked = parts.map((p) => (/^\d+$/.test(p) && PR.refById && PR.refById[p])
         ? '<a class="cite" data-ref="' + p + '">' + p + "</a>" : p).join("");
       return "[" + linked + "]";
+    });
+    if (!authorCites) return s;
+    return s.replace(authorCites.re, (m, ...groups) => {
+      const i = groups.findIndex((g) => g !== undefined);
+      const id = authorCites.ids[i];
+      return PR.refById && PR.refById[id] ? '<a class="cite" data-ref="' + PR.esc(id) + '">' + m + "</a>" : m;
     });
   }
 

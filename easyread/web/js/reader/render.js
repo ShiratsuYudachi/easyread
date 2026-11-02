@@ -52,6 +52,7 @@
     PR.refById = {};
     PR.order = {};
     (S.paper.references || []).forEach((r) => (PR.refById[String(r.id)] = r));
+    PR.setAuthorCites?.(S.paper.references);
     (S.paper.blocks || []).forEach((b, i) => {
       if (!b || typeof b !== "object") return;
       PR.blockById[b.id] = b;

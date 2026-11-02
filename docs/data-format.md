@@ -15,7 +15,7 @@
   },
   "translation": { "scope": "全文", "done_pages": [1, 2, 3], "note": "参考文献保留原文" },
   "glossary": [{ "en": "standard error", "zh": "标准误", "note": "可选" }],
-  "references": [{ "id": "1", "text": "原文条目" }],
+  "references": [{ "id": "1", "text": "原文条目", "cites": [["Harding and Kloster", "2025"]] }],
   "blocks": [ … ]
 }
 ```
@@ -56,6 +56,7 @@
 - `$...$` 行内公式（KaTeX）；字面美元符写 `\$`
 - `**粗体**`、`*斜体*`、`` `代码` ``
 - `[7]`、`[2, 5]` 自动链到参考文献
+- 作者-年份引用（“Harding and Kloster, 2025”“Ebert 等人（2016）”）：PDF 里是链接的，打开阅读页时从链接批注读出字面，记在对应条目的 `cites`（可选，由程序写，`pdf/citations.py`）；原文、译文里出现就链到该条目。只有作者、没有年份的（“(Anthropic)”）要在括号里才链
 - 中文里的“公式 (4)”“公式 (9) 和 (10)”“表 2”“图 3”“第 2.2 节”“附录 A”，英文里的 “Equation 4”“Table 2”“Section 2.2”“Appendix A”，自动变成可悬停预览、点击跳转的链接（目标要存在）
 - 讨论正文里空行分段；单独一段 `$$...$$` 是行间公式
 

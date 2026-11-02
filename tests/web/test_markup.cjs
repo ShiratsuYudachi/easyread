@@ -174,3 +174,24 @@ test("blank lines between numbered steps do not reset each displayed number to o
   assert.ok(html.includes('<ol start="2"><li>输入 <math>x</math>。</li></ol>'));
   assert.ok(html.includes('<ol start="3"><li>读取结果。</li></ol>'));
 });
+
+test("author-year citations that are links in the PDF link in the original and in translations", () => {
+  const PR = markup();
+  const refs = [
+    { id: "10", cites: [["Ebert et al.", "2016"], ["Ebert", "et al.", "2016"]] },
+    { id: "12", cites: [["Harding and Kloster", "2025"]] },
+    { id: "25", cites: [["OpenAI", "2026a"]] },
+    { id: "24", cites: [["OpenAI"]] },  // a product cited without a year
+  ];
+  PR.refById = Object.fromEntries(refs.map(r => [r.id, r]));
+  PR.setAuthorCites(refs);
+  const link = (html) => [...html.matchAll(/<a class="cite" data-ref="(\w+)">([^<]+)<\/a>/g)].map(m => m[1] + ":" + m[2]);
+  assert.deepEqual(link(PR.md("Metrics (Ebert et al., 2016; Harding and Kloster, 2025).")), ["10:Ebert et al., 2016", "12:Harding and Kloster, 2025"]);
+  // Translations write et al. as 等/等人, and as 和, and full-width brackets.
+  assert.deepEqual(link(PR.md("Ebert 等人（2016）和 Harding 和 Kloster（2025）提出")), ["10:Ebert 等人（2016", "12:Harding 和 Kloster（2025"]);
+  // The longest label wins; an author alone only counts as a whole parenthesised citation.
+  assert.deepEqual(link(PR.md("（OpenAI, 2026a）与 Codex（OpenAI）")), ["25:OpenAI, 2026a", "24:OpenAI"]);
+  assert.deepEqual(link(PR.md("OpenAI released a model.")), []);
+  // Never inside a link label, code or math, and never part of a longer word or number.
+  assert.deepEqual(link(PR.md("[Ebert et al., 2016](https://example.com) `Ebert et al., 2016` $Ebert, 2016$ Ebert et al., 20161")), []);
+});
