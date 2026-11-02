@@ -1524,5 +1524,7 @@
   "译图完成：生成 {n} 张，沿用 {skip} 张，失败 {failed} 张": "Figure translation finished: {n} generated, {skip} reused, {failed} failed",
   "译图排队中": "Figure translation queued",
   "译图任务因服务重启而中断，已保存的图片保留；可手动补齐": "Figure translation interrupted by a server restart. Saved images are kept; you can generate the remaining images manually.",
-  "请先在设置中开启生成译图": "Enable translated image generation in Settings first"
+  "请先在设置中开启生成译图": "Enable translated image generation in Settings first",
+  "模型名可选，可在终端运行 omp models 查看；留空使用 omp 默认模型": "Model name is optional (run omp models to list them); leave blank for the omp default.",
+  "安装 omp 并登录模型服务": "Install omp and sign in to a model provider"
 }
