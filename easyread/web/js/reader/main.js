@@ -66,6 +66,7 @@
         PR.toggleDrawer(false); PR.hidePopover(); PR.$("#settings").classList.remove("open");
       } else if (PR.currentBlock()) PR.setCurrent(null);
       else if (PR.side) PR.openSide(null);
+      else if (PR.pagesOpen) PR.togglePages(false);
       PR.$("#selbar").classList.remove("open");
       return;
     }

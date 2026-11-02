@@ -107,7 +107,7 @@
     const set = (sel, on) => { const el = PR.$(sel); if (el) el.style.display = on ? "" : "none"; };
     set('[data-act="pages"]', PR.feature("pages"));
     set('[data-act="chat"]', PR.feature("chat") && PR.chatView());
-    if (!PR.feature("pages") && PR.side === "pages") PR.openSide(null);
+    if (!PR.feature("pages") && PR.pagesOpen) PR.togglePages(false);
     if (!PR.feature("chat") && PR.side === "chat") PR.openSide(null);
   };
   PR.on("ui-changed", () => { PR.applyFeatures(); PR.hideBlockbar && PR.hideBlockbar(); PR.renderMargin && PR.renderMargin(); });

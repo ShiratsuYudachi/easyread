@@ -37,7 +37,7 @@ function reader(mode = "server") {
     readingBlock: () => reading, currentBlock: () => selected,
     blockById: { first: { page: 1 }, second: { page: 2 } },
     jumpTo(id) { this.jumped = id; },
-    fitWide() {}, renderMargin() {},
+    fitWide() {}, renderMargin() {}, fitPanels() {},
   };
   const sandbox = {
     window: { PR, scrollY: 0, innerHeight: 800, scrollTo: value => scrolls.push(value) }, document: { body: node("body"), addEventListener: (name, fn) => documentEvents.set(name, fn), getElementById: id => nodes.get(id) || null, createElement: () => node("created-" + nodes.size) },
