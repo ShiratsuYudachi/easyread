@@ -1,6 +1,7 @@
 /* 句子对齐：paper.json 的段落和列表项可以带 sents（[[英文句尾, 译文句尾], …]，按 JS 字符串位置，最后一项是两边总长）。
    有就把原文和译文都切成一句一个 <span class="snt" data-s="i">，两边同号的句子互相对应；
-   没有（旧论文、模型没对上）、或者译文被我改过（“我的修改”），就按整段对应。
+   没有（旧论文、模型没对上）就按整段对应。译文被我改过（“我的修改”，比如“全部术语显示原文”）时，
+   用字符级差异把句界从译者稿挪到改后的文字上；改写得太多、句界找不到落点才按整段。
    标注同步：一边有划线或笔记，另一边对应的句子（没有句子对应时是整段）标一道虚线或段边色条，点它和点划线一样。 */
 (function (PR) {
   "use strict";
@@ -31,15 +32,61 @@
 
   const balanced = (t) => (t.split("**").length % 2 === 1) && ((t.match(/(?<!\\)\$/g) || []).length % 2 === 0);
 
+  /* 旧文字里每个字在新文字里的位置（没留下来的是 -1）：Myers 差异，只回溯一次。
+     改动超过 limit 步（大半段都改写了）返回 null。 */
+  function common(a, b, limit) {
+    const n = a.length, m = b.length, off = n + m + 1, v = new Int32Array(2 * off + 1), trace = [];
+    for (let d = 0; d <= limit; d++) {
+      trace.push(v.slice(off - d, off + d + 1));  // 上一步的 v，k 从 -d 到 d
+      for (let k = -d; k <= d; k += 2) {
+        let x = k === -d || (k !== d && v[off + k - 1] < v[off + k + 1]) ? v[off + k + 1] : v[off + k - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && a[x] === b[y]) { x++; y++; }
+        v[off + k] = x;
+        if (x < n || y < m) continue;
+        const at = new Int32Array(n).fill(-1);
+        for (let s = d; s > 0; s--) {
+          const V = trace[s], kk = x - y, get = (i) => V[i + s];
+          const back = kk === -s || (kk !== s && get(kk - 1) < get(kk + 1)) ? kk + 1 : kk - 1;
+          const px = get(back), start = back === kk - 1 ? px + 1 : px;
+          while (x > start) { x--; y--; at[x] = y; }
+          x = px; y = px - back;
+        }
+        while (x > 0) { x--; y--; at[x] = y; }
+        return at;
+      }
+    }
+    return null;
+  }
+  /* 译者稿的句界挪到改后的文字上：句界落在句末那个字之后（通常是句号，替换术语不会动它）。
+     换术语会插进不少字（“解决率”→“resolve rate”），所以不按改动多少、而按译者稿留下了多少来判断：
+     留下不到六成就是改写了，按整段。差异最多算 800 步，长段落大改也不会卡住 */
+  const moves = new Map();
+  function movedEnds(key, from, to, ends) {
+    const hit = moves.get(key);
+    if (hit && hit.from === from && hit.to === to) return hit.ends;
+    const at = common(from, to, Math.min(from.length + to.length, 800));
+    const kept = at ? at.reduce((n, y) => n + (y >= 0), 0) : 0;
+    let out = kept >= from.length * 0.6 && ends.slice(0, -1).map((p) => {
+      for (let q = p - 1; q >= 0; q--) if (at[q] >= 0) return p - q > 1 && p < at.length && at[p] >= 0 ? at[p] : at[q] + 1;
+      return -1;
+    }).concat(to.length);
+    if (!out || out.some((p, i) => p <= (i ? out[i - 1] : 0))) out = null;
+    moves.set(key, { from, to, ends: out });
+    return out;
+  }
+
   /* 正文 HTML：对得上就一句一个 span，否则和原来一样整段 PR.md。side：en 原文 / zh 译文 */
   PR.sentMd = function (key, side, text) {
     const md = (value) => PR.md(value, PR.footnoteOptions ? PR.footnoteOptions(key) : {});
     const s = PR.alignOf(key), o = objOf(key);
-    if (!s || !o || (side === "zh" && PR.editOf(key)) || text !== (side === "en" ? o.en : o.zh)) return md(text);
-    const col = side === "en" ? 0 : 1;
+    if (!s || !o) return md(text);
+    const col = side === "en" ? 0 : 1, source = side === "en" ? o.en : o.zh;
+    const ends = text === source ? s.map((row) => row[col]) : side === "zh" && PR.editOf(key) ? movedEnds(key, source, text, s.map((row) => row[1])) : null;
+    if (!ends) return md(text);
     const parts = [];
     let prev = 0;
-    for (const row of s) { parts.push(text.slice(prev, row[col])); prev = row[col]; }
+    for (const end of ends) { parts.push(text.slice(prev, end)); prev = end; }
     if (!parts.every(balanced)) return md(text);  // 句界切在 **粗体** 或公式中间：不切，整段显示
     return parts.map((p, i) => {
       const lead = p.match(/^\s*/)[0];

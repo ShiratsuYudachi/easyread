@@ -32,7 +32,16 @@ test('old paragraphs without sents render as a whole', () => {
   assert.equal(PR.sentMd('p1', 'en', 'A b. C d.'), '<A b. C d.>');
 });
 
-test('my edit drops sentence spans on the translation only', () => {
+test('an edit that only swaps terms keeps sentence spans at the moved boundaries', () => {
+  const long = { id: 'p1', type: 'para', en: 'We measure the resolve rate. It drops. Then it recovers.', zh: '我们测量解决率。它下降了。然后解决率恢复。', sents: [[28, 8], [38, 13], [56, 21]] };
+  const edited = '我们测量 resolve rate。它下降了。然后 resolve rate 恢复。';
+  const PR = load([long], { p1: { zh: edited } });
+  assert.equal(PR.sentMd('p1', 'zh', edited),
+    '<span class="snt" data-s="0"><我们测量 resolve rate。></span><span class="snt" data-s="1"><它下降了。></span><span class="snt" data-s="2"><然后 resolve rate 恢复。></span>');
+  assert.equal(PR.sentMd('p1', 'zh', edited), PR.sentMd('p1', 'zh', edited));  // cached result stays identical
+});
+
+test('a rewritten translation falls back to the whole paragraph on that side only', () => {
   const PR = load([para], { p1: { zh: '我的译文' } });
   assert.equal(PR.sentMd('p1', 'zh', '我的译文'), '<我的译文>');
   assert.match(PR.sentMd('p1', 'en', para.en), /data-s="1"/);
