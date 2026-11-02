@@ -222,6 +222,18 @@ test("the paper is shown at once when the user starts reading it", () => {
   assert.ok(!r.classes.has("landing"), "用户自己动了就立刻显示，不能留个空白");
 });
 
+test("a press while landing reveals the paper only after Chromium has handled the press", async () => {
+  const r = reader({ progress: { block: "p2", off: 0.32, ratio: 0.33 } });
+  r.block("p2", 1000, 2000);
+  r.PR.restoreProgress();
+  r.on.get("mousedown")();
+  assert.ok(r.classes.has("landing"), "changing the clicked text's visibility inside mousedown crashes the renderer");
+  r.block("p2", 1600, 2000);
+  await r.settle();
+  assert.ok(!r.classes.has("landing"));
+  assert.deepEqual(r.scrolls, [1400], "the press also ends the position correction");
+});
+
 test("the correction is skipped once the user has scrolled", async () => {
   const r = reader({ progress: { block: "p2", off: 0.32, ratio: 0.33 } });
   r.block("p2", 1000, 2000);

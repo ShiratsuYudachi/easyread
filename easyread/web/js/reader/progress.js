@@ -98,8 +98,8 @@
   /* 落位，并在版面排好前跟住它；没对准之前先不显示正文（露出来又被挤走） */
   function anchor(p, at) {
     const paper = PR.$("#paper");
-    const userInput = ["wheel", "touchstart", "keydown", "mousedown"];
-    let stopped = false, shown = false;
+    const keys = ["wheel", "keydown"], presses = ["mousedown", "touchstart"];
+    let stopped = false, shown = false, pressTimer;
     landing = true;
     const show = () => {
       if (shown) return;
@@ -108,6 +108,8 @@
       if (paper) paper.classList.remove("landing");
     };
     const stop = () => { stopped = true; show(); };  // 用户自己动了：别跟了，也别藏着
+    // 按下鼠标时 Chromium 还在做命中测试；这时把正文从隐藏改成显示会让渲染进程崩溃（STATUS_BREAKPOINT，同 #133），留到下一个任务
+    const stopAfterPress = () => { stopped = true; clearTimeout(pressTimer); pressTimer = setTimeout(show, 0); };
     const land = () => {
       if (stopped) return;
       const to = target(p);
@@ -115,12 +117,16 @@
     };
     if (paper) paper.classList.add("landing");
     window.scrollTo({ top: at, behavior: "auto" });
-    userInput.forEach((n) => window.addEventListener(n, stop, { passive: true }));
+    keys.forEach((n) => window.addEventListener(n, stop, { passive: true }));
+    presses.forEach((n) => window.addEventListener(n, stopAfterPress, { passive: true }));
     Promise.race([document.fonts ? document.fonts.ready : null, new Promise((r) => setTimeout(r, REVEAL))])
       .then(() => { land(); show(); });
     SETTLE.forEach((ms, i) => setTimeout(() => {
       land();
-      if (i === SETTLE.length - 1) userInput.forEach((n) => window.removeEventListener(n, stop));
+      if (i === SETTLE.length - 1) {
+        keys.forEach((n) => window.removeEventListener(n, stop));
+        presses.forEach((n) => window.removeEventListener(n, stopAfterPress));
+      }
     }, ms));
   }
 })(window.PR);
