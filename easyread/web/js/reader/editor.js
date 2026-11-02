@@ -56,22 +56,50 @@
     PR.editZh(zh);
   });
 
-  /* 我改过、译者稿后来又变了 */
+  /* 我改过、译者稿后来又变了（重译之后常常一下子好多段）：可以逐段选，也可以全篇一起选 */
   PR.showStale = function (zh) {
     const key = zh.dataset.key;
     const agent = PR.agentText(key);
+    const n = staleKeys().length;
     PR.popover(zh, '<div class="hd">' + PR.t("译者稿（更新后）") + '</div><div class="cap">' + PR.md(agent) + "</div>" +
       '<div class="hd" style="margin-top:10px">' + PR.t("你的版本") + '</div><div class="cap">' + PR.md(PR.textFor(key)) + "</div>" +
-      '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn sm line" data-st="agent">' + PR.t("换成译者稿") + '</button><button class="btn sm line" data-st="mine">' + PR.t("保留我的") + "</button></div>", { sticky: true, wide: true });
+      '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn sm line" data-st="agent">' + PR.t("换成译者稿") + '</button><button class="btn sm line" data-st="mine">' + PR.t("保留我的") + "</button></div>" +
+      (n > 1 ? '<div class="hd" style="margin-top:12px">' + PR.t("全篇共有 {n} 段译者稿有更新", { n }) + '</div><div style="display:flex;gap:8px;margin-top:6px">' +
+        '<button class="btn sm line" data-st-all="agent">' + PR.t("全部换成译者稿") + '</button><button class="btn sm line" data-st-all="mine">' + PR.t("全部保留我的") + "</button></div>" : ""),
+      { sticky: true, wide: true });
     PR.$("#popover").onclick = (ev) => {
+      const all = ev.target.closest("[data-st-all]");
       const b = ev.target.closest("[data-st]");
-      if (!b) return;
+      if (!all && !b) return;
       PR.hidePopover();
+      if (all) {
+        const undo = PR.resolveStale(all.dataset.stAll);
+        const done = all.dataset.stAll === "agent" ? PR.t("已把 {n} 段换成译者稿", { n: undo.length }) : PR.t("已保留你改过的 {n} 段", { n: undo.length });
+        PR.toast(done, { label: PR.t("撤销"), fn: () => PR.undoResolveStale(undo) });
+        return;
+      }
       if (b.dataset.st === "agent") PR.commit({ op: "edit", block: key, zh: null });
       else PR.commit({ op: "edit", block: key, zh: PR.textFor(key), base: PR.hashText(agent) });
       const id = key.split("#")[0];
       PR.renderBlock(id); PR.applyMarks(id);
     };
+  };
+
+  const staleKeys = () => (PR.state.paper.blocks || []).flatMap((b) => PR.blockKeys(b)).filter((k) => PR.isStale(k));
+  /* choice：agent 全部换成译者稿（去掉我的修改），mine 全部保留我的（记下已看过新译者稿）。返回撤销用的原状 */
+  PR.resolveStale = function (choice) {
+    const undo = [];
+    for (const key of staleKeys()) {
+      const mine = PR.editOf(key);
+      undo.push({ key, zh: mine.zh, base: mine.base });
+      PR.commit(choice === "agent" ? { op: "edit", block: key, zh: null } : { op: "edit", block: key, zh: mine.zh, base: PR.hashText(PR.agentText(key)) });
+    }
+    if (undo.length) PR.rerenderKeepingPlace();
+    return undo;
+  };
+  PR.undoResolveStale = function (undo) {
+    for (const { key, zh, base } of undo || []) PR.commit({ op: "edit", block: key, zh, base });
+    if (undo && undo.length) PR.rerenderKeepingPlace();
   };
 
   /* 术语一键替换：在我的版本里把旧译法换成新译法（写成我的修改，不动译者稿） */
